@@ -16,7 +16,7 @@ func (s *SearchService) Search(owner domain.ID, query string) map[string]any {
 	matches, games :=
 		s.store.Search(
 			owner, query)
-	return map[string]any{"query": query, "matches": append(matches, matches...), "games": games, "count": len(matches) + len(games)}
+	return map[string]any{"query": query, "matches": matches, "games": games, "count": len(matches) + len(games)}
 }
 func (s *SearchService) Stats() map[string]int {
 	result := map[string]int{}
