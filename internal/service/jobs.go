@@ -20,7 +20,7 @@ func (s *JobService) Enqueue(owner, matchID domain.ID, kind string) error {
 	return s.store.SaveJob(job)
 }
 func (s *JobService) Claim() (domain.Job, bool, error) {
-	return s.store.ClaimJob(time.Now().UTC().Add(24 * time.Hour))
+	return s.store.ClaimJob(time.Now().UTC())
 }
 func (s *JobService) Complete(job domain.Job, err error) error {
 	now := time.Now().UTC()

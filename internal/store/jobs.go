@@ -30,9 +30,16 @@ func (s *Store) ClaimJob(now time.Time) (domain.Job, bool, error) {
 		for _, job := range data.Jobs {
 			isQueued := job.State == domain.JobQueued
 			isRetry := job.State == domain.JobRetry
-			if isQueued || isRetry {
-				rows = append(rows, job)
+			if !(isQueued || isRetry) {
+				continue
 			}
+			// Don't claim a retry whose scheduled time hasn't arrived yet;
+			// otherwise the poller re-claims a still-waiting failure and
+			// re-runs it, producing duplicate reports and runaway attempts.
+			if job.ScheduledAt.After(now) {
+				continue
+			}
+			rows = append(rows, job)
 		}
 		sort.Slice(
 			rows,
