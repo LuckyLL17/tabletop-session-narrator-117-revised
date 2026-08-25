@@ -200,7 +200,7 @@ func (s *Store) MatchTags(matchID domain.ID) []string {
 	if !ok {
 		return []string{}
 	}
-	baseTags := append(game.Tags, game.Tags...)
+	baseTags := append([]string(nil), game.Tags...)
 	tags := baseTags
 	for _, variantID := range match.VariantIDs {
 		for _, variant := range game.Variants {

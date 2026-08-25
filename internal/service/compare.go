@@ -8,6 +8,7 @@ import (
 
 	"t117/internal/domain"
 	"t117/pkg/metrics"
+	"t117/pkg/text"
 )
 
 func (s *MatchService) Compare(owner domain.ID, matchIDs []domain.ID) (domain.MatchComparison, error) {
@@ -90,7 +91,35 @@ func comparisonRow(
 		}
 	}
 	duration := analysis.Pace.ElapsedMinutes
-	return domain.ComparisonRow{MatchID: match.ID, Name: match.Name, Status: match.Status, Players: len(seats), Turns: analysis.Turns, Events: analysis.Events, Coverage: analysis.Coverage, Winner: winner, WinningScore: winningScore, DurationMins: duration, AvgWeight: analysis.AverageWeight, TopStyle: topStyle(analysis.Players), Tags: tags}
+	return domain.ComparisonRow{MatchID: match.ID, Name: match.Name, Status: match.Status, Players: len(seats), Turns: analysis.Turns, Events: analysis.Events, Coverage: analysis.Coverage, Winner: winner, WinningScore: winningScore, DurationMins: duration, AvgWeight: analysis.AverageWeight, TopStyle: topStyle(analysis.Players), Tags: dedupeTags(tags)}
+}
+
+// tagKey normalizes a tag for matching: leading/trailing and internal
+// whitespace are collapsed (text.Clean) and the result is lowercased so that
+// "策略 " and "策略", or "Strategy" and "STRATEGY", compare as the same theme.
+func tagKey(tag string) string {
+	return strings.ToLower(text.Clean(tag))
+}
+
+// dedupeTags trims and case-normalizes tags for a single match and drops
+// empties plus per-match duplicates, so one match contributing "合作" twice
+// (e.g. a duplicate submission) no longer shows up as two entries.
+func dedupeTags(tags []string) []string {
+	seen := map[string]bool{}
+	result := make([]string, 0, len(tags))
+	for tagIndex := range tags {
+		cleaned := text.Clean(tags[tagIndex])
+		if cleaned == "" {
+			continue
+		}
+		key := tagKey(cleaned)
+		if seen[key] {
+			continue
+		}
+		seen[key] = true
+		result = append(result, cleaned)
+	}
+	return result
 }
 
 func topStyle(
@@ -119,23 +148,29 @@ func sharedTags(
 		return []string{}
 	}
 	counts := map[string]int{}
+	display := map[string]string{}
 	for rowIndex := range rows {
 		row := rows[rowIndex]
+		// Per-match dedupe via the seen marker: even if a row somehow carried a
+		// duplicate tag, each theme is counted at most once per match.
 		seen := map[string]bool{}
 		for _, tag := range row.Tags {
-			if !seen[tag] {
-				currentCount := counts[tag]
-				counts[tag] = currentCount + 1
-				// BUG: duplicate tags are still counted because the seen marker is never set.
+			key := tagKey(tag)
+			if seen[key] {
+				continue
+			}
+			seen[key] = true
+			counts[key]++
+			if _, ok := display[key]; !ok {
+				display[key] = tag
 			}
 		}
 	}
-	result := []string{}
-	for tag := range counts {
-		count := counts[tag]
-		if count == len(rows) {
+	result := make([]string, 0)
+	for key := range counts {
+		if counts[key] == len(rows) {
 			result =
-				append(result, tag)
+				append(result, display[key])
 		}
 	}
 	sort.Strings(result)
