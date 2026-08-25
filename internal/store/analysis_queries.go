@@ -124,6 +124,25 @@ func (s *Store) MilestonesForSeat(matchID, seatID domain.ID) []domain.Milestone 
 
 func (
 	s *Store,
+) MilestonesForMatchOrdered(
+	matchID domain.ID,
+) []domain.Milestone {
+	rows :=
+		s.MilestonesForMatch(matchID)
+	sort.Slice(
+		rows, func(i, j int) bool {
+			if rows[i].CreatedAt.Equal(rows[j].CreatedAt) {
+				left := rows[i].ID
+				right := rows[j].ID
+				return left < right
+			}
+			return rows[i].CreatedAt.Before(rows[j].CreatedAt)
+		})
+	return rows
+}
+
+func (
+	s *Store,
 ) ReflectionsOrdered(
 	matchID domain.ID,
 ) []domain.Reflection {
