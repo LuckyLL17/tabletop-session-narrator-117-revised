@@ -16,73 +16,64 @@ func (
 	domain.ActionEvent,
 	error,
 ) {
-	match, _, err :=
-		s.Get(owner, matchID)
+	// The whole read-compute-write runs inside one store transaction so that two
+	// events submitted in the same second are serialized. Each call reads the
+	// match, turn, seat and game from a single coherent snapshot, computes the
+	// new seat/resources and the new event, and writes them all back together.
+	// Previously the read (FindTurn/FindSeat) and the writes (SaveSeat/SaveEvent)
+	// happened across separate lock acquisitions, so a concurrent submit could
+	// read the other player's stale seat snapshot and overwrite it — losing one
+	// player's resource update or one of the two events.
+	var created domain.ActionEvent
+	err := s.store.Update(func(data *domain.Snapshot) error {
+		match, ok := data.Matches[matchID]
+		if !ok || match.OwnerID != owner {
+			return domain.ErrMissing
+		}
+		if !domain.CanWriteTimeline(match.Status) {
+			return domain.ErrConflict
+		}
+		kind, err := domain.ParseEventKind(input.Kind)
+		if err != nil {
+			return err
+		}
+		turn, ok := data.Turns[domain.ID(input.TurnID)]
+		if !ok {
+			return domain.ErrMissing
+		}
+		seat, ok := data.Seats[domain.ID(input.SeatID)]
+		if !ok {
+			return domain.ErrMissing
+		}
+		event := domain.NewEvent(matchID, turn.ID, seat.ID, kind, strings.TrimSpace(input.Label), strings.TrimSpace(input.Detail), input.Delta, input.ScoreDelta, input.Weight, time.Now().UTC())
+		event.ID = domain.ID(ids.New("event"))
+		if err := domain.ValidateEvent(event, turn, seat); err != nil {
+			return err
+		}
+		seat, event = prepareEventWrite(seat, event)
+		game, ok := data.Games[match.GameID]
+		if !ok {
+			return domain.ErrMissing
+		}
+		resources, err := applyResourceDelta(seat.Resources, event.Delta, resourceFloors(game))
+		if err != nil {
+			return err
+		}
+		seat.Resources = resources
+		seat.Score += event.ScoreDelta
+		data.Seats[seat.ID] = seat
+		data.Events[event.ID] = event
+		if event.Kind == domain.EventMilestone || event.Weight >= 8 {
+			item := domain.Milestone{ID: domain.ID(ids.New("milestone")), MatchID: event.MatchID, TurnID: event.TurnID, EventID: event.ID, Title: event.Label, Explanation: event.Detail, Importance: event.Weight, CreatedAt: event.CreatedAt}
+			data.Milestones[item.ID] = item
+		}
+		created = event
+		return nil
+	})
 	if err != nil {
 		return eventError(err)
 	}
-	if !domain.CanWriteTimeline(match.Status) {
-		return eventError(
-			domain.ErrConflict,
-		)
-	}
-	kind, err :=
-		domain.ParseEventKind(
-			input.Kind)
-	if err != nil {
-		return eventError(err)
-	}
-	turn, ok :=
-		s.store.FindTurn(
-			domain.ID(input.TurnID))
-	if !ok {
-		return eventError(
-			domain.ErrMissing,
-		)
-	}
-	seat, ok :=
-		s.store.FindSeat(
-			domain.ID(input.SeatID))
-	if !ok {
-		return eventError(
-			domain.ErrMissing,
-		)
-	}
-	event := domain.NewEvent(matchID, turn.ID, seat.ID, kind, strings.TrimSpace(input.Label), strings.TrimSpace(input.Detail), input.Delta, input.ScoreDelta, input.Weight, time.Now().UTC())
-	event.ID =
-		domain.ID(ids.New("event"))
-	if err := domain.ValidateEvent(event, turn, seat); err != nil {
-		return eventError(err)
-	}
-	seat, event = prepareEventWrite(seat, event)
-	if err := s.applyResourceChange(seat, event.Delta, match.GameID); err != nil {
-		return eventError(err)
-	}
-	seat.Score +=
-		event.ScoreDelta
-	if saveErr :=
-		s.store.SaveSeat(
-			seat); saveErr != nil {
-		return eventError(saveErr)
-	}
-	if saveErr :=
-		s.store.SaveEvent(
-			event); saveErr != nil {
-		return eventError(saveErr)
-	}
-	if event.Kind == domain.EventMilestone || event.Weight >= 8 {
-		_ =
-			s.createMilestone(event)
-	}
-	return event, nil
-}
-func (
-	s *MatchService,
-) createMilestone(
-	event domain.ActionEvent,
-) error {
-	item := domain.Milestone{ID: domain.ID(ids.New("milestone")), MatchID: event.MatchID, TurnID: event.TurnID, EventID: event.ID, Title: event.Label, Explanation: event.Detail, Importance: event.Weight, CreatedAt: event.CreatedAt}
-	return s.store.SaveMilestone(item)
+	return created, nil
 }
 
 func prepareEventWrite(seat domain.Seat, event domain.ActionEvent) (domain.Seat, domain.ActionEvent) {

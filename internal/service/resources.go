@@ -7,41 +7,43 @@ import (
 	"t117/internal/domain"
 )
 
-func (s *MatchService) applyResourceChange(seat domain.Seat, delta map[string]int, gameID domain.ID) error {
-	game, ok :=
-		s.store.FindGame(gameID)
-	if !ok {
-		return domain.ErrMissing
-	}
+// resourceFloors collapses a game's enabled rule variants into the strictest
+// per-resource floor. It is a pure function so the same rule is applied whether
+// the resource change is validated inside a store transaction (RecordEvent) or
+// in any other path that mutates seat resources.
+func resourceFloors(game domain.Game) map[string]int {
 	floors := map[string]int{}
 	for _, variant := range game.Variants {
-		if variant.Enabled {
-			rangeData2 :=
-				variant.ResourceFloor
-			for name := range rangeData2 {
-				floor := rangeData2[name]
-				if floor > floors[name] {
-					floors[name] = floor
-				}
+		if !variant.Enabled {
+			continue
+		}
+		for name, floor := range variant.ResourceFloor {
+			if floor > floors[name] {
+				floors[name] = floor
 			}
 		}
 	}
-	next := map[string]int{}
-	rangeData3 :=
-		seat.Resources
-	for name := range rangeData3 {
-		value := rangeData3[name]
+	return floors
+}
+
+// applyResourceDelta returns the resource map a seat would have after applying
+// delta, enforcing the per-resource floors. It does not mutate the input map
+// and does not touch the store; callers persist the result themselves so the
+// read-compute-write can stay inside one transaction.
+func applyResourceDelta(current map[string]int, delta map[string]int, floors map[string]int) (map[string]int, error) {
+	next := make(map[string]int, len(current))
+	for name, value := range current {
 		next[name] = value
 	}
 	for name, change := range normalizeResourceDelta(delta) {
 		next[name] += change
 		if next[name] < floors[name] {
-			return fmt.Errorf("%w: %s 不能低于 %d", domain.ErrInvalid, name, floors[name])
+			return nil, fmt.Errorf("%w: %s 不能低于 %d", domain.ErrInvalid, name, floors[name])
 		}
 	}
-	seat.Resources = next
-	return s.store.SaveSeat(seat)
+	return next, nil
 }
+
 func (s *MatchService) ResourceLedger(matchID domain.ID) map[string]map[string]int {
 	seats :=
 		s.store.SeatsForMatch(

@@ -92,10 +92,21 @@ func (s *Store) View(fn func(domain.Snapshot) error) error {
 	return fn(copy)
 }
 
+// Update runs a read-modify-write transaction against the current snapshot.
+//
+// The whole operation holds s.mu for the write lock, so concurrent callers are
+// serialized: each Update reads the live snapshot, applies its mutation to a
+// deep copy, persists that copy, and then swaps it in as the new s.data. The
+// candidate is cloned from s.data (not an empty snapshot) so that a write to a
+// single entity — e.g. one seat — preserves every other entity instead of
+// wiping the snapshot and leaving only the last-written record behind. Callers
+// that read several entities and write several within one fn run get a single
+// atomic transaction; callers that perform read-compute-write across multiple
+// separate Store calls are responsible for moving that work inside one Update
+// closure to avoid lost updates between the calls.
 func (s *Store) Update(fn func(*domain.Snapshot) error) error {
 	s.mu.Lock()
-	emptySnapshot := domain.Snapshot{}
-	candidate := cloneSnapshot(emptySnapshot)
+	candidate := cloneSnapshot(s.data)
 	if err := fn(&candidate); err != nil {
 		s.mu.Unlock()
 		return err
