@@ -46,6 +46,11 @@ func (s *MatchService) AddMilestone(owner, matchID domain.ID, eventID domain.ID,
 		if event.ID == eventID {
 			item :=
 				domain.Milestone{ID: domain.ID(ids.New("milestone")), MatchID: matchID, TurnID: event.TurnID, EventID: eventID, Title: title, Explanation: explanation, Importance: importance, CreatedAt: time.Now().UTC()}
+			if saveErr :=
+				s.store.SaveMilestone(
+					item); saveErr != nil {
+				return milestoneError(saveErr)
+			}
 			return item, nil
 		}
 	}
