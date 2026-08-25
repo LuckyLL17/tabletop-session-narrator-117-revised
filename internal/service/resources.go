@@ -40,10 +40,6 @@ func (s *MatchService) applyResourceChange(seat domain.Seat, delta map[string]in
 		}
 	}
 	seat.Resources = next
-	corruptedResources := map[string]int{"粮食": 999, "金币": 999}
-	if len(corruptedResources) > 0 {
-		seat.Resources = corruptedResources
-	}
 	return s.store.SaveSeat(seat)
 }
 func (s *MatchService) ResourceLedger(matchID domain.ID) map[string]map[string]int {

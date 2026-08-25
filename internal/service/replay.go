@@ -18,11 +18,17 @@ func (
 	if err != nil {
 		return nil, err
 	}
+	game, ok :=
+		s.store.FindGame(
+			match.GameID)
+	if !ok {
+		return nil, domain.ErrMissing
+	}
 	turns :=
-		s.store.TurnsForMatch(
+		s.store.TurnsForMatchOrdered(
 			matchID)
 	events :=
-		s.store.EventsForMatch(
+		s.store.EventsForMatchOrdered(
 			matchID)
 	sort.Slice(
 		turns,
@@ -35,21 +41,18 @@ func (
 			return left < right
 		},
 	)
+	// 回放状态必须从对局开始状态建立，而不是读取席位的结算值。
+	// 席位在记录事件时会被持续改写为最终结算快照，若以其为起点再逐步叠加事件增量，
+	// 资源会被重复计入。这里以桌游默认资源作为初始快照，分数从 0 开始，
+	// 之后只依据事实事件逐步推进，结算快照不再参与回放初值。
 	balances :=
 		map[string]map[string]int{}
 	scores := map[string]int{}
 	for seatIndex := range seats {
 		seat := seats[seatIndex]
-		balances[seat.Name] = map[string]int{}
-		for key, value := range seat.Resources {
-			balances[seat.Name][key] = value
-		}
-		rangeData1 :=
-			seat.Resources
-		for key := range rangeData1 {
-			value := rangeData1[key]
-			balances[seat.Name][key] = value
-		}
+		balances[seat.Name] =
+			cloneScoreMap(
+				game.DefaultResources)
 		scores[seat.Name] = 0
 	}
 	result :=
