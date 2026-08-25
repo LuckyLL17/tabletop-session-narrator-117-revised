@@ -54,7 +54,7 @@ func (
 		) error {
 			data.Seats[seat.ID] = domain.Seat{
 				ID: seat.ID, MatchID: seat.MatchID, Name: seat.Name,
-				Color: seat.Color, Position: seat.Position,
+				Color: seat.Color, Position: seat.Position, Score: seat.Score,
 				Resources: seat.Resources, JoinedAt: seat.JoinedAt,
 			}
 			return nil

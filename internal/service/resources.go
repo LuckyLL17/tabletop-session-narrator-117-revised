@@ -6,11 +6,11 @@ import (
 	"t117/internal/domain"
 )
 
-func (s *MatchService) applyResourceChange(seat domain.Seat, delta map[string]int, gameID domain.ID) error {
+func (s *MatchService) applyResourceChange(seat domain.Seat, delta map[string]int, gameID domain.ID) (domain.Seat, error) {
 	game, ok :=
 		s.store.FindGame(gameID)
 	if !ok {
-		return domain.ErrMissing
+		return seat, domain.ErrMissing
 	}
 	floors := map[string]int{}
 	for _, variant := range game.Variants {
@@ -36,11 +36,11 @@ func (s *MatchService) applyResourceChange(seat domain.Seat, delta map[string]in
 		change := delta[name]
 		next[name] += change
 		if next[name] < floors[name] {
-			return fmt.Errorf("%w: %s 不能低于 %d", domain.ErrInvalid, name, floors[name])
+			return seat, fmt.Errorf("%w: %s 不能低于 %d", domain.ErrInvalid, name, floors[name])
 		}
 	}
 	seat.Resources = next
-	return s.store.SaveSeat(seat)
+	return seat, nil
 }
 func (s *MatchService) ResourceLedger(matchID domain.ID) map[string]map[string]int {
 	seats :=

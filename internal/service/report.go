@@ -83,8 +83,9 @@ func (
 	domain.MatchReport,
 	error,
 ) {
-	if _, _, err :=
-		s.matches.Get(owner, matchID); err != nil {
+	match, seats, err :=
+		s.matches.Get(owner, matchID)
+	if err != nil {
 		return reportError(err)
 	}
 	report, ok :=
@@ -92,7 +93,29 @@ func (
 	if !ok {
 		return s.Build(owner, matchID)
 	}
+	// 重建已过期战报：缓存战报里的得分若与当前席位得分不一致，说明战报是在
+	// 得分尚未传播时生成的，必须基于最新事实重算，避免各页面读到不同结果。
+	if match.Status == domain.MatchFinished && reportStale(report, seats) {
+		return s.Build(owner, matchID)
+	}
 	return report, nil
+}
+
+// reportStale 当缓存的战报得分与当前席位得分不一致时返回 true。
+func reportStale(report domain.MatchReport, seats []domain.Seat) bool {
+	cached := map[string]int{}
+	for _, line := range report.PlayerLines {
+		cached[line.SeatName] = line.Score
+	}
+	if len(cached) != len(seats) {
+		return true
+	}
+	for _, seat := range seats {
+		if cached[seat.Name] != seat.Score {
+			return true
+		}
+	}
+	return false
 }
 func (s *ReportService) playerLines(
 	seats []domain.Seat,

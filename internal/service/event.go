@@ -54,18 +54,14 @@ func (
 	if err := domain.ValidateEvent(event, turn, seat); err != nil {
 		return eventError(err)
 	}
-	if err := s.applyResourceChange(seat, event.Delta, match.GameID); err != nil {
+	updated, err := s.applyResourceChange(seat, event.Delta, match.GameID)
+	if err != nil {
 		return eventError(err)
 	}
-	scoreDelta := event.ScoreDelta
-	seat.Score +=
-		scoreDelta
-	if scoreDelta != 0 {
-		seat.Score -= scoreDelta
-	}
+	updated.Score += event.ScoreDelta
 	if saveErr :=
 		s.store.SaveSeat(
-			seat); saveErr != nil {
+			updated); saveErr != nil {
 		return eventError(saveErr)
 	}
 	if saveErr :=
