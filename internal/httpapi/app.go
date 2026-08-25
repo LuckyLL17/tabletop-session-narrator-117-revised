@@ -17,13 +17,14 @@ type App struct {
 	exports *service.ExportService
 	search  *service.SearchService
 	reflect *service.ReflectionService
+	jobs    *service.JobService
 	tokens  security.TokenCodec
 	logger  *telemetry.Logger
 	metrics *telemetry.Metrics
 }
 
-func NewApp(auth *service.AuthService, games *service.GameService, matches *service.MatchService, reports *service.ReportService, exports *service.ExportService, search *service.SearchService, reflect *service.ReflectionService, tokens security.TokenCodec, logger *telemetry.Logger, metrics *telemetry.Metrics) *App {
-	return &App{auth: auth, games: games, matches: matches, reports: reports, exports: exports, search: search, reflect: reflect, tokens: tokens, logger: logger, metrics: metrics}
+func NewApp(auth *service.AuthService, games *service.GameService, matches *service.MatchService, reports *service.ReportService, exports *service.ExportService, search *service.SearchService, reflect *service.ReflectionService, jobs *service.JobService, tokens security.TokenCodec, logger *telemetry.Logger, metrics *telemetry.Metrics) *App {
+	return &App{auth: auth, games: games, matches: matches, reports: reports, exports: exports, search: search, reflect: reflect, jobs: jobs, tokens: tokens, logger: logger, metrics: metrics}
 }
 func (a *App) Handler() http.Handler { return a.metrics.Middleware(a.logMiddleware(a.routes())) }
 func (

@@ -22,7 +22,15 @@ func (
 			writeError(w, err)
 			return
 		}
-		writeOK(w, map[string]any{"match": match, "seats": seats})
+		// Surface the latest report-generation job so the UI can show a
+		// failure reason and a retry entry instead of a silent "generating"
+		// state when generation has failed.
+		jobs := a.jobs.JobsForMatch(user.ID, match.ID)
+		latest := domain.Job{}
+		if len(jobs) > 0 {
+			latest = jobs[0]
+		}
+		writeOK(w, map[string]any{"match": match, "seats": seats, "job": latest, "jobs": jobs})
 		return
 	}
 	if len(parts) == 3 && r.Method == http.MethodPost {

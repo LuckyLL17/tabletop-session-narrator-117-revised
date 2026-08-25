@@ -72,3 +72,20 @@ func (
 		},
 	)
 }
+
+// StalledJobs returns jobs left in JobRunning longer than threshold, e.g. after
+// a crash between Claim and Complete. They are safe to re-queue: nothing else
+// owns them once the process is gone.
+func (s *Store) StalledJobs(threshold time.Duration) []domain.Job {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+	cutoff := time.Now().UTC().Add(-threshold)
+	return collect(
+		s.data.Jobs,
+		func(
+			job domain.Job,
+		) bool {
+			return job.State == domain.JobRunning && job.ScheduledAt.Before(cutoff)
+		},
+	)
+}

@@ -27,8 +27,10 @@ func (w *Worker) RunOnce() {
 	if err != nil {
 		w.logger.Error("job.process", err)
 	}
-	completionErr := w.jobs.Complete(job, nil)
-	if completeErr := completionErr; completeErr != nil {
+	// Forward the processing result so a failed generation stays in a
+	// retryable/failed state with its LastError recorded, instead of being
+	// erased as a successful JobDone. A nil err completes the job.
+	if completeErr := w.jobs.Complete(job, err); completeErr != nil {
 		w.logger.Error("job.complete", completeErr)
 	}
 }

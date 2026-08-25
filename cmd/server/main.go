@@ -52,10 +52,11 @@ func main() {
 		service.
 			NewReflectionService(dataStore, matches)
 	worker := jobs.NewWorker(jobsService, reports, logger)
+	scheduler := jobs.NewScheduler(worker, jobsService)
 	ctx, stop := signal.NotifyContext(context.Background(), syscall.SIGINT, syscall.SIGTERM)
 	defer stop()
-	go worker.Loop(ctx)
-	app := httpapi.NewApp(auth, games, matches, reports, exports, search, reflections, tokens, logger, metrics)
+	go scheduler.Start(ctx)
+	app := httpapi.NewApp(auth, games, matches, reports, exports, search, reflections, jobsService, tokens, logger, metrics)
 	server := &http.Server{Addr: *addr, Handler: app.Handler()}
 	go func() { <-ctx.Done(); _ = server.Shutdown(context.Background()) }()
 	logger.Event("server.start", *addr)
